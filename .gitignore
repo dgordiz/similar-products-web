@@ -1,4 +1,4 @@
-Maven
+# Maven
 
 target/
 pom.xml.tag
@@ -8,14 +8,14 @@ pom.xml.next
 release.properties
 .flattened-pom.xml
 
-Java
+# Java
 
 *.class
 *.jar
 *.war
 *.ear
 
-Eclipse
+# Eclipse
 
 .classpath
 .project
@@ -24,7 +24,7 @@ Eclipse
 .springBeans
 .sts4-cache/
 
-IntelliJ IDEA
+# IntelliJ IDEA
 
 .idea/
 *.iml
@@ -32,11 +32,11 @@ IntelliJ IDEA
 *.ipr
 out/
 
-Visual Studio Code
+# Visual Studio Code
 
 .vscode/
 
-Visual Studio
+# Visual Studio
 
 .vs/
 *.user
@@ -46,7 +46,7 @@ Visual Studio
 [Bb]in/
 [Oo]bj/
 
-NetBeans
+# NetBeans
 
 /nbproject/private/
 /nbbuild/
@@ -54,18 +54,18 @@ NetBeans
 /.nb-gradle/
 build/
 
-Logs
+# Logs
 
 *.log
 logs/
 
-OS
+# OS
 
 .DS_Store
 Thumbs.db
 ehthumbs.db
 
-Temporary files
+# Temporary files
 
 *.tmp
 *.temp
