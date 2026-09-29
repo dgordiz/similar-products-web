@@ -5,5 +5,24 @@ spring:
 existing-api:
   base-url: http://localhost:3001
 
+resilience4j:
+ bulkhead:
+   instances:
+     existing-catalog:
+       max-concurrent-calls: 50
+       max-wait-duration: 100ms
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - info
+          - metrics
+          - prometheus
+  endpoint:
+    health:
+      show-details: always
 server:
   port: 5000

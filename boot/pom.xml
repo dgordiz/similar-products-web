@@ -1,52 +1,79 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
-  <modelVersion>4.0.0</modelVersion>
+    <modelVersion>4.0.0</modelVersion>
 
-  <artifactId>similar-products-web-boot</artifactId>
-  <packaging>jar</packaging>
-  <name>similar-products-web-boot</name>
+    <artifactId>similar-products-web-boot</artifactId>
+    <packaging>jar</packaging>
+    <name>similar-products-web-boot</name>
+    <description>Runtime: Spring Boot application, wiring, configuration, entry point</description>
 
+    <parent>
+        <groupId>com.example.similarproducts</groupId>
+        <artifactId>similar-products-web</artifactId>
+        <version>0.1.0</version>
+    </parent>
 
-  <parent>
-    <groupId>com.example.similarproducts</groupId>
-    <artifactId>similar-products-web</artifactId>
-    <version>0.1.0</version>
-  </parent>
+    <dependencies>
+        <!-- All adapters -->
+        <dependency>
+            <groupId>com.example.similarproducts</groupId>
+            <artifactId>similar-products-web-application</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.example.similarproducts</groupId>
+            <artifactId>similar-products-web-api-rest</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.example.similarproducts</groupId>
+            <artifactId>similar-products-web-rest-repository</artifactId>
+        </dependency>
 
-  <dependencies>
-    <dependency>
-      <groupId>com.example.similarproducts</groupId>
-      <artifactId>similar-products-web-api-rest</artifactId>
-    </dependency>
+        <!-- Spring Boot Actuator -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
 
-    <dependency>
-      <groupId>com.example.similarproducts</groupId>
-      <artifactId>similar-products-web-rest-repository</artifactId>
-    </dependency>
+        <!-- Micrometer for metrics -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+        </dependency>
 
-  </dependencies>
+        <!-- Validation -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
 
-  <build>
-    <plugins>
-      <!-- Provides support to package and run applications "in-place" -->
-      <plugin>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-maven-plugin</artifactId>
-      </plugin>
+        <!-- Tests -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
 
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-compiler-plugin</artifactId>
-      </plugin>
+		<dependency>
+			<groupId>com.squareup.okhttp3</groupId>
+			<artifactId>mockwebserver</artifactId>
+			<scope>test</scope>
+		</dependency>
 
-       <!-- Assembly Build info on final artefact-->
-      <plugin>
-		 <groupId>org.codehaus.mojo</groupId>
-		 <artifactId>exec-maven-plugin</artifactId>
-	  </plugin>
-    </plugins>
-  </build>
+    </dependencies>
 
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
 </project>

@@ -5,6 +5,7 @@
   <artifactId>similar-products-web-application</artifactId>
   <packaging>jar</packaging>
   <name>similar-products-web-application</name>
+  <description>Core business logic: use cases and domain models (Spring-independent)</description>
 
   <parent>
     <groupId>com.example.similarproducts</groupId>
@@ -13,27 +14,32 @@
   </parent>
 
   <dependencies>
-	
-	 <!-- WebFlux + WebClient -->
+    <!-- SLF4J para logging -->
     <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-webflux</artifactId>
-    </dependency>
-
-    <!-- Lombok -->
-    <dependency>
-        <groupId>org.projectlombok</groupId>
-        <artifactId>lombok</artifactId>
-        <optional>true</optional>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-api</artifactId>
     </dependency>
 
     <!-- Tests -->
     <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter-api</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter-engine</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+		<groupId>org.projectlombok</groupId>
+		<artifactId>lombok</artifactId>
+		<optional>true</optional>
+	</dependency>
+	<dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-test</artifactId>
         <scope>test</scope>
-    </dependency>
-
+	</dependency>
   </dependencies>
-
 </project>

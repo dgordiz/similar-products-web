@@ -2,245 +2,585 @@ package com.example.similarproducts.driven.rest.repositories.adapters;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+import com.example.existingapis.generated.model.ProductDetail;
+import com.example.similarproducts.application.exceptions.ErrorCode;
 import com.example.similarproducts.application.exceptions.SimilarProductsException;
 import com.example.similarproducts.domain.ProductDTO;
+import com.example.similarproducts.driven.rest.repositories.clients.ExistingApisClient;
+import com.example.similarproducts.driven.rest.repositories.mappers.ExistingApisMapper;
 
-import okhttp3.mockwebserver.MockResponse;
-import okhttp3.mockwebserver.MockWebServer;
-import okhttp3.mockwebserver.RecordedRequest;
+import reactor.core.publisher.Mono;
 
+@ExtendWith(MockitoExtension.class)
 class ProductRepositoryAdapterTest {
 
-    private MockWebServer mockWebServer;
+    private static final String PRODUCT_ID = "1";
 
+    private static final String SIMILAR_PRODUCT_ID_1 = "2";
+    private static final String SIMILAR_PRODUCT_ID_2 = "3";
+    private static final String SIMILAR_PRODUCT_ID_3 = "4";
+
+    @Mock
+    private ExistingApisClient existingApisClient;
+
+    @Mock
+    private ExistingApisMapper mapper;
+
+    @InjectMocks
     private ProductRepositoryAdapter adapter;
 
+    private ProductDetail productDetail1;
+    private ProductDetail productDetail2;
+    private ProductDetail productDetail3;
+
+    private ProductDTO productDTO1;
+    private ProductDTO productDTO2;
+    private ProductDTO productDTO3;
+
     @BeforeEach
-    void setUp() throws Exception {
-        mockWebServer = new MockWebServer();
-        mockWebServer.start();
+    void setUp() {
 
-        WebClient webClient = WebClient.builder()
-                .build();
+        productDetail1 = new ProductDetail()
+                .id(SIMILAR_PRODUCT_ID_1)
+                .name("Product 2")
+                .price(new BigDecimal("20.0"))
+                .availability(true);
 
-        adapter = new ProductRepositoryAdapter(webClient);
+        productDetail2 = new ProductDetail()
+                .id(SIMILAR_PRODUCT_ID_2)
+                .name("Product 3")
+                .price(new BigDecimal("30.0"))
+                .availability(false);
 
-        String baseUrl = mockWebServer.url("").toString();
+        productDetail3 = new ProductDetail()
+                .id(SIMILAR_PRODUCT_ID_3)
+                .name("Product 4")
+                .price(new BigDecimal("40.0"))
+                .availability(true);
 
-        if (baseUrl.endsWith("/")) {
-            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
-        }
+        productDTO1 = product(
+                SIMILAR_PRODUCT_ID_1,
+                "Product 2",
+                new BigDecimal("20.0"),
+                true
+        );
 
-        ReflectionTestUtils.setField(adapter, "baseUrl", baseUrl);
-    }
+        productDTO2 = product(
+                SIMILAR_PRODUCT_ID_2,
+                "Product 3",
+                new BigDecimal("30.0"),
+                false
+        );
 
-    @AfterEach
-    void tearDown() throws Exception {
-        mockWebServer.shutdown();
+        productDTO3 = product(
+                SIMILAR_PRODUCT_ID_3,
+                "Product 4",
+                new BigDecimal("40.0"),
+                true
+        );
     }
 
     @Test
-    void shouldReturnSimilarProductIds() throws Exception {
-        mockWebServer.enqueue(
-                new MockResponse()
-                        .setResponseCode(200)
-                        .addHeader("Content-Type", "application/json")
-                        .setBody("""
-                                ["1", "2", "3"]
-                                """)
+    void shouldReturnSimilarProductsInSameOrder() {
+
+        Set<String> similarProductIds = new LinkedHashSet<>(
+                List.of(
+                        SIMILAR_PRODUCT_ID_1,
+                        SIMILAR_PRODUCT_ID_2,
+                        SIMILAR_PRODUCT_ID_3
+                )
         );
 
-        List<String> result = adapter
-                .getSimilarProductIds("1")
-                .block();
+        when(existingApisClient.getProductSimilarIds(PRODUCT_ID))
+                .thenReturn(Mono.just(similarProductIds));
+
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_1))
+                .thenReturn(Mono.just(productDetail1));
+
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_2))
+                .thenReturn(Mono.just(productDetail2));
+
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_3))
+                .thenReturn(Mono.just(productDetail3));
+
+        when(mapper.toProductDTO(productDetail1))
+                .thenReturn(productDTO1);
+
+        when(mapper.toProductDTO(productDetail2))
+                .thenReturn(productDTO2);
+
+        when(mapper.toProductDTO(productDetail3))
+                .thenReturn(productDTO3);
+
+        Set<ProductDTO> result =
+                adapter.getSimilarProducts(PRODUCT_ID);
 
         assertThat(result)
-                .containsExactly("1", "2", "3");
+                .isInstanceOf(LinkedHashSet.class)
+                .containsExactly(
+                        productDTO1,
+                        productDTO2,
+                        productDTO3
+                );
 
-        RecordedRequest request = mockWebServer.takeRequest();
+        verify(existingApisClient)
+                .getProductSimilarIds(PRODUCT_ID);
 
-        assertThat(request.getMethod())
-                .isEqualTo("GET");
+        verify(existingApisClient)
+                .getProductById(SIMILAR_PRODUCT_ID_1);
 
-        assertThat(request.getPath())
-                .isEqualTo("/product/1/similarids");
+        verify(existingApisClient)
+                .getProductById(SIMILAR_PRODUCT_ID_2);
+
+        verify(existingApisClient)
+                .getProductById(SIMILAR_PRODUCT_ID_3);
+
+        verify(mapper).toProductDTO(productDetail1);
+        verify(mapper).toProductDTO(productDetail2);
+        verify(mapper).toProductDTO(productDetail3);
     }
 
     @Test
-    void shouldReturnNotFoundWhenSimilarProductIdsProductDoesNotExist()
-            throws Exception {
+    void shouldReturnEmptySetWhenThereAreNoSimilarProducts() {
 
-        mockWebServer.enqueue(
-                new MockResponse()
-                        .setResponseCode(404)
-        );
+        when(existingApisClient.getProductSimilarIds(PRODUCT_ID))
+                .thenReturn(Mono.just(new LinkedHashSet<>()));
 
-        assertThatThrownBy(() ->
-                adapter.getSimilarProductIds("999").block()
+        Set<ProductDTO> result =
+                adapter.getSimilarProducts(PRODUCT_ID);
+
+        assertThat(result).isEmpty();
+
+        verify(existingApisClient)
+                .getProductSimilarIds(PRODUCT_ID);
+
+        verifyNoMoreInteractions(existingApisClient);
+        verifyNoMoreInteractions(mapper);
+    }
+
+    @Test
+    void shouldThrowNotFoundWhenSimilarProductIdsRequestReturns404() {
+
+        when(existingApisClient.getProductSimilarIds(PRODUCT_ID))
+                .thenReturn(
+                        Mono.error(
+                                webClientException(HttpStatus.NOT_FOUND)
+                        )
+                );
+
+        assertThatThrownBy(
+                () -> adapter.getSimilarProducts(PRODUCT_ID)
         )
                 .isInstanceOf(SimilarProductsException.class)
-                .satisfies(error -> {
-                    SimilarProductsException exception =
-                            (SimilarProductsException) error;
-
-                    assertThat(exception.getErrorCode())
-                            .isEqualTo(HttpStatus.NOT_FOUND);
-
-                    assertThat(exception.getMessage())
-                            .isEqualTo("Product not found: 999");
-                });
-
-        RecordedRequest request = mockWebServer.takeRequest();
-
-        assertThat(request.getPath())
-                .isEqualTo("/product/999/similarids");
+                .hasMessage("Product not found");
     }
 
     @Test
-    void shouldReturnBadGatewayWhenGettingSimilarProductIdsFails()
-            throws Exception {
+    void shouldThrowGatewayTimeoutWhenSimilarProductIdsRequestReturns504() {
 
-        mockWebServer.enqueue(
-                new MockResponse()
-                        .setResponseCode(500)
-        );
+        when(existingApisClient.getProductSimilarIds(PRODUCT_ID))
+                .thenReturn(
+                        Mono.error(
+                                webClientException(HttpStatus.GATEWAY_TIMEOUT)
+                        )
+                );
 
-        assertThatThrownBy(() ->
-                adapter.getSimilarProductIds("1").block()
+        assertThatThrownBy(
+                () -> adapter.getSimilarProducts(PRODUCT_ID)
         )
                 .isInstanceOf(SimilarProductsException.class)
-                .satisfies(error -> {
-                    SimilarProductsException exception =
-                            (SimilarProductsException) error;
-
-                    assertThat(exception.getErrorCode())
-                            .isEqualTo(HttpStatus.BAD_GATEWAY);
-
-                    assertThat(exception.getMessage())
-                            .isEqualTo(
-                                    "Error getting similar product ids "
-                                            + "for product 1"
-                            );
-                });
-
-        RecordedRequest request = mockWebServer.takeRequest();
-
-        assertThat(request.getPath())
-                .isEqualTo("/product/1/similarids");
+                .hasMessage(
+                        "Timeout getting similar product ids for product "
+                                + PRODUCT_ID
+                );
     }
 
     @Test
-    void shouldReturnProduct() throws Exception {
-        mockWebServer.enqueue(
-                new MockResponse()
-                        .setResponseCode(200)
-                        .addHeader("Content-Type", "application/json")
-                        .setBody("""
-                                {
-                                  "id": "1",
-                                  "name": "Product 1",
-                                  "price": 10.0,
-                                  "availability": true
-                                }
-                                """)
+    void shouldThrowGatewayTimeoutWhenSimilarProductIdsRequestTimesOut() {
+
+        when(existingApisClient.getProductSimilarIds(PRODUCT_ID))
+                .thenReturn(
+                        Mono.error(new TimeoutException())
+                );
+
+        assertThatThrownBy(
+                () -> adapter.getSimilarProducts(PRODUCT_ID)
+        )
+                .isInstanceOf(SimilarProductsException.class)
+                .hasMessage(
+                        "Timeout getting similar product ids for product "
+                                + PRODUCT_ID
+                );
+    }
+
+    @Test
+    void shouldThrowBadGatewayWhenSimilarProductIdsRequestFails() {
+
+        when(existingApisClient.getProductSimilarIds(PRODUCT_ID))
+                .thenReturn(
+                        Mono.error(
+                                new RuntimeException("Connection error")
+                        )
+                );
+
+        assertThatThrownBy(
+                () -> adapter.getSimilarProducts(PRODUCT_ID)
+        )
+                .isInstanceOf(SimilarProductsException.class)
+                .hasMessage(
+                        "Error getting similar product ids for product "
+                                + PRODUCT_ID
+                );
+    }
+
+    @Test
+    void shouldIgnoreProductWhenGettingProductReturns404() {
+
+        Set<String> similarProductIds = new LinkedHashSet<>(
+                List.of(
+                        SIMILAR_PRODUCT_ID_1,
+                        SIMILAR_PRODUCT_ID_2
+                )
         );
 
-        ProductDTO result = adapter
-                .getProduct("1")
-                .block();
+        when(existingApisClient.getProductSimilarIds(PRODUCT_ID))
+                .thenReturn(Mono.just(similarProductIds));
+
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_1))
+                .thenReturn(
+                        Mono.error(
+                                webClientException(HttpStatus.NOT_FOUND)
+                        )
+                );
+
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_2))
+                .thenReturn(Mono.just(productDetail2));
+
+        when(mapper.toProductDTO(productDetail2))
+                .thenReturn(productDTO2);
+
+        Set<ProductDTO> result =
+                adapter.getSimilarProducts(PRODUCT_ID);
 
         assertThat(result)
-                .isNotNull();
+                .containsExactly(productDTO2);
 
-        assertThat(result.getId())
-                .isEqualTo("1");
+        verify(existingApisClient)
+                .getProductById(SIMILAR_PRODUCT_ID_1);
 
-        assertThat(result.getName())
-                .isEqualTo("Product 1");
+        verify(existingApisClient)
+                .getProductById(SIMILAR_PRODUCT_ID_2);
 
-        assertThat(result.getPrice())
-                .isEqualByComparingTo(new BigDecimal("10.0"));
-
-        assertThat(result.getAvailability())
-                .isTrue();
-
-        RecordedRequest request = mockWebServer.takeRequest();
-
-        assertThat(request.getMethod())
-                .isEqualTo("GET");
-
-        assertThat(request.getPath())
-                .isEqualTo("/product/1");
+        verify(mapper)
+                .toProductDTO(productDetail2);
     }
 
     @Test
-    void shouldReturnNotFoundWhenProductDoesNotExist()
-            throws Exception {
+    void shouldIgnoreProductWhenGettingProductReturns504() {
 
-        mockWebServer.enqueue(
-                new MockResponse()
-                        .setResponseCode(404)
+        Set<String> similarProductIds = new LinkedHashSet<>(
+                List.of(
+                        SIMILAR_PRODUCT_ID_1,
+                        SIMILAR_PRODUCT_ID_2
+                )
         );
 
-        assertThatThrownBy(() ->
-                adapter.getProduct("999").block()
-        )
-                .isInstanceOf(SimilarProductsException.class)
-                .satisfies(error -> {
-                    SimilarProductsException exception =
-                            (SimilarProductsException) error;
+        when(existingApisClient.getProductSimilarIds(PRODUCT_ID))
+                .thenReturn(Mono.just(similarProductIds));
 
-                    assertThat(exception.getErrorCode())
-                            .isEqualTo(HttpStatus.NOT_FOUND);
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_1))
+                .thenReturn(
+                        Mono.error(
+                                webClientException(HttpStatus.GATEWAY_TIMEOUT)
+                        )
+                );
 
-                    assertThat(exception.getMessage())
-                            .isEqualTo("Product not found: 999");
-                });
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_2))
+                .thenReturn(Mono.just(productDetail2));
 
-        RecordedRequest request = mockWebServer.takeRequest();
+        when(mapper.toProductDTO(productDetail2))
+                .thenReturn(productDTO2);
 
-        assertThat(request.getPath())
-                .isEqualTo("/product/999");
+        Set<ProductDTO> result =
+                adapter.getSimilarProducts(PRODUCT_ID);
+
+        assertThat(result)
+                .containsExactly(productDTO2);
+
+        verify(existingApisClient)
+                .getProductById(SIMILAR_PRODUCT_ID_1);
+
+        verify(existingApisClient)
+                .getProductById(SIMILAR_PRODUCT_ID_2);
+
+        verify(mapper)
+                .toProductDTO(productDetail2);
     }
 
     @Test
-    void shouldReturnBadGatewayWhenGettingProductFails()
-            throws Exception {
+    void shouldIgnoreProductWhenGettingProductTimesOut() {
 
-        mockWebServer.enqueue(
-                new MockResponse()
-                        .setResponseCode(500)
+        Set<String> similarProductIds = new LinkedHashSet<>(
+                List.of(
+                        SIMILAR_PRODUCT_ID_1,
+                        SIMILAR_PRODUCT_ID_2
+                )
         );
 
-        assertThatThrownBy(() ->
-                adapter.getProduct("1").block()
+        when(existingApisClient.getProductSimilarIds(PRODUCT_ID))
+                .thenReturn(Mono.just(similarProductIds));
+
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_1))
+                .thenReturn(
+                        Mono.error(new TimeoutException())
+                );
+
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_2))
+                .thenReturn(Mono.just(productDetail2));
+
+        when(mapper.toProductDTO(productDetail2))
+                .thenReturn(productDTO2);
+
+        Set<ProductDTO> result =
+                adapter.getSimilarProducts(PRODUCT_ID);
+
+        assertThat(result)
+                .containsExactly(productDTO2);
+    }
+
+    @Test
+    void shouldIgnoreProductWhenGettingProductFails() {
+
+        Set<String> similarProductIds = new LinkedHashSet<>(
+                List.of(
+                        SIMILAR_PRODUCT_ID_1,
+                        SIMILAR_PRODUCT_ID_2
+                )
+        );
+
+        when(existingApisClient.getProductSimilarIds(PRODUCT_ID))
+                .thenReturn(Mono.just(similarProductIds));
+
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_1))
+                .thenReturn(
+                        Mono.error(
+                                new RuntimeException("Connection error")
+                        )
+                );
+
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_2))
+                .thenReturn(Mono.just(productDetail2));
+
+        when(mapper.toProductDTO(productDetail2))
+                .thenReturn(productDTO2);
+
+        Set<ProductDTO> result =
+                adapter.getSimilarProducts(PRODUCT_ID);
+
+        assertThat(result)
+                .containsExactly(productDTO2);
+    }
+
+    @Test
+    void shouldReturnRemainingProductsInOriginalOrderWhenOneProductFails() {
+
+        Set<String> similarProductIds = new LinkedHashSet<>(
+                List.of(
+                        SIMILAR_PRODUCT_ID_1,
+                        SIMILAR_PRODUCT_ID_2,
+                        SIMILAR_PRODUCT_ID_3
+                )
+        );
+
+        when(existingApisClient.getProductSimilarIds(PRODUCT_ID))
+                .thenReturn(Mono.just(similarProductIds));
+
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_1))
+                .thenReturn(Mono.just(productDetail1));
+
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_2))
+                .thenReturn(
+                        Mono.error(
+                                new RuntimeException("Connection error")
+                        )
+                );
+
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_3))
+                .thenReturn(Mono.just(productDetail3));
+
+        when(mapper.toProductDTO(productDetail1))
+                .thenReturn(productDTO1);
+
+        when(mapper.toProductDTO(productDetail3))
+                .thenReturn(productDTO3);
+
+        Set<ProductDTO> result =
+                adapter.getSimilarProducts(PRODUCT_ID);
+
+        assertThat(result)
+                .isInstanceOf(LinkedHashSet.class)
+                .containsExactly(
+                        productDTO1,
+                        productDTO3
+                );
+    }
+
+    @Test
+    void shouldReturnEmptySetWhenAllProductsFail() {
+
+        Set<String> similarProductIds = new LinkedHashSet<>(
+                List.of(
+                        SIMILAR_PRODUCT_ID_1,
+                        SIMILAR_PRODUCT_ID_2
+                )
+        );
+
+        when(existingApisClient.getProductSimilarIds(PRODUCT_ID))
+                .thenReturn(Mono.just(similarProductIds));
+
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_1))
+                .thenReturn(
+                        Mono.error(new RuntimeException("Connection error"))
+                );
+
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_2))
+                .thenReturn(
+                        Mono.error(new TimeoutException())
+                );
+
+        Set<ProductDTO> result =
+                adapter.getSimilarProducts(PRODUCT_ID);
+
+        assertThat(result).isEmpty();
+
+        verifyNoMoreInteractions(mapper);
+    }
+
+    @Test
+    void shouldPropagateSimilarProductsExceptionFromSimilarIds() {
+
+        SimilarProductsException exception =
+                new SimilarProductsException(
+                        "Custom error",
+                        ErrorCode.BAD_GATEWAY
+                );
+
+        when(existingApisClient.getProductSimilarIds(PRODUCT_ID))
+                .thenReturn(Mono.error(exception));
+
+        assertThatThrownBy(
+                () -> adapter.getSimilarProducts(PRODUCT_ID)
         )
-                .isInstanceOf(SimilarProductsException.class)
-                .satisfies(error -> {
-                    SimilarProductsException exception =
-                            (SimilarProductsException) error;
+                .isSameAs(exception);
+    }
 
-                    assertThat(exception.getErrorCode())
-                            .isEqualTo(HttpStatus.BAD_GATEWAY);
+    @Test
+    void shouldIgnoreSimilarProductsExceptionFromIndividualProduct() {
 
-                    assertThat(exception.getMessage())
-                            .isEqualTo("Error getting product 1");
-                });
+        Set<String> similarProductIds = new LinkedHashSet<>(
+                List.of(
+                        SIMILAR_PRODUCT_ID_1,
+                        SIMILAR_PRODUCT_ID_2
+                )
+        );
 
-        RecordedRequest request = mockWebServer.takeRequest();
+        SimilarProductsException exception =
+                new SimilarProductsException(
+                        "Custom error",
+                        ErrorCode.BAD_GATEWAY
+                );
 
-        assertThat(request.getPath())
-                .isEqualTo("/product/1");
+        when(existingApisClient.getProductSimilarIds(PRODUCT_ID))
+                .thenReturn(Mono.just(similarProductIds));
+
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_1))
+                .thenReturn(Mono.error(exception));
+
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_2))
+                .thenReturn(Mono.just(productDetail2));
+
+        when(mapper.toProductDTO(productDetail2))
+                .thenReturn(productDTO2);
+
+        Set<ProductDTO> result =
+                adapter.getSimilarProducts(PRODUCT_ID);
+
+        assertThat(result)
+                .containsExactly(productDTO2);
+    }
+
+    @Test
+    void shouldUseMapperWhenGettingProduct() {
+
+        Set<String> similarProductIds =
+                new LinkedHashSet<>(
+                        List.of(SIMILAR_PRODUCT_ID_1)
+                );
+
+        when(existingApisClient.getProductSimilarIds(PRODUCT_ID))
+                .thenReturn(Mono.just(similarProductIds));
+
+        when(existingApisClient.getProductById(SIMILAR_PRODUCT_ID_1))
+                .thenReturn(Mono.just(productDetail1));
+
+        when(mapper.toProductDTO(productDetail1))
+                .thenReturn(productDTO1);
+
+        Set<ProductDTO> result =
+                adapter.getSimilarProducts(PRODUCT_ID);
+
+        assertThat(result)
+                .containsExactly(productDTO1);
+
+        verify(mapper)
+                .toProductDTO(productDetail1);
+    }
+
+    private ProductDTO product(
+            String id,
+            String name,
+            BigDecimal price,
+            boolean availability) {
+
+        ProductDTO product = new ProductDTO();
+
+        product.setId(id);
+        product.setName(name);
+        product.setPrice(price);
+        product.setAvailability(availability);
+
+        return product;
+    }
+
+    private WebClientResponseException webClientException(
+            HttpStatus status) {
+
+        return WebClientResponseException.create(
+                status.value(),
+                status.getReasonPhrase(),
+                HttpHeaders.EMPTY,
+                null,
+                null
+        );
     }
 }

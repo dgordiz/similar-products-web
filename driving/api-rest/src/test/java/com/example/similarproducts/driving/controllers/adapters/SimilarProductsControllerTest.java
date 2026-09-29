@@ -1,117 +1,181 @@
 package com.example.similarproducts.driving.controllers.adapters;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
-import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
 import org.springframework.http.HttpStatus;
-import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.http.ResponseEntity;
 
-import com.example.similarproducts.application.exceptions.SimilarProductsException;
 import com.example.similarproducts.application.ports.driving.GetSimilarProductsServicePort;
 import com.example.similarproducts.domain.ProductDTO;
-import com.example.similarproducts.driving.controllers.handlers.GlobalExceptionHandler;
-
-import reactor.core.publisher.Mono;
+import com.example.similarproducts.driving.controllers.mappers.SimilarProductsRestMapper;
+import com.example.similarproducts.driving.rest.generated.model.ProductDetail;
 
 @ExtendWith(MockitoExtension.class)
 class SimilarProductsControllerTest {
 
-    @Mock
-    private GetSimilarProductsServicePort useCase;
+	@Mock
+	private GetSimilarProductsServicePort service;
 
-    private WebTestClient webTestClient;
+	@Mock
+	private SimilarProductsRestMapper mapper;
 
-    @BeforeEach
-    void setUp() {
-        SimilarProductsController controller =
-                new SimilarProductsController(useCase);
+	private SimilarProductsController controller;
 
-        webTestClient = WebTestClient
-                .bindToController(controller)
-                .controllerAdvice(new GlobalExceptionHandler())
-                .build();
-    }
+	@BeforeEach
+	void setUp() {
+		controller = new SimilarProductsController(service, mapper);
+	}
 
-    @Test
-    void shouldReturnSimilarProducts() {
+	@Test
+	void shouldReturnSimilarProducts() {
 
-        ProductDTO product = new ProductDTO();
-        product.setId("2");
-        product.setName("Product 2");
-        product.setPrice(new BigDecimal(20.5));
-        product.setAvailability(true);
+		ProductDTO product = product("2", "Product 2", new BigDecimal("20.5"), true);
 
-        when(useCase.getSimilarProducts("1"))
-                .thenReturn(Mono.just(List.of(product)));
+		ProductDetail productDetail = productDetail("2", "Product 2", 20.5, true);
 
-        webTestClient
-                .get()
-                .uri("/product/1/similar")
-                .exchange()
-                .expectStatus()
-                .isOk()
-                .expectBody()
-                .json("""
-                        [
-                          {
-                            "id": "2",
-                            "name": "Product 2",
-                            "price": 20.5,
-                            "availability": true
-                          }
-                        ]
-                        """);
-    }
+		Set<ProductDTO> products = new LinkedHashSet<>();
+		products.add(product);
 
-    @Test
-    void shouldPropagateNotFoundError() {
+		when(service.getSimilarProducts("1")).thenReturn(products);
 
-        SimilarProductsException exception =
-                new SimilarProductsException(
-                        "Product not found: 1",
-                        HttpStatus.NOT_FOUND
-                );
+		when(mapper.toResponse(product)).thenReturn(productDetail);
 
-        when(useCase.getSimilarProducts("1"))
-                .thenReturn(Mono.error(exception));
+		ResponseEntity<Set<ProductDetail>> response = controller.getProductSimilar("1");
 
-        webTestClient
-                .get()
-                .uri("/product/1/similar")
-                .exchange()
-                .expectStatus()
-                .isNotFound()
-                .expectBody(String.class)
-                .isEqualTo("Product not found: 1");
-    }
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 
-    @Test
-    void shouldPropagateBadGatewayError() {
+		assertThat(response.getBody()).containsExactly(productDetail);
 
-        SimilarProductsException exception =
-                new SimilarProductsException(
-                        "Error getting product 1",
-                        HttpStatus.BAD_GATEWAY
-                );
+		verify(service).getSimilarProducts("1");
 
-        when(useCase.getSimilarProducts("1"))
-                .thenReturn(Mono.error(exception));
+		verify(mapper).toResponse(product);
+	}
 
-        webTestClient
-                .get()
-                .uri("/product/1/similar")
-                .exchange()
-                .expectStatus()
-                .isEqualTo(HttpStatus.BAD_GATEWAY)
-                .expectBody(String.class)
-                .isEqualTo("Error getting product 1");
-    }
+	@Test
+	void shouldReturnSimilarProductsInSameOrder() {
+
+		ProductDTO product1 = product("2", "Product 2", new BigDecimal("20.5"), true);
+
+		ProductDTO product2 = product("3", "Product 3", new BigDecimal("30.5"), false);
+
+		ProductDTO product3 = product("4", "Product 4", new BigDecimal("40.5"), true);
+
+		ProductDetail productDetail1 = productDetail("2", "Product 2", 20.5, true);
+
+		ProductDetail productDetail2 = productDetail("3", "Product 3", 30.5, false);
+
+		ProductDetail productDetail3 = productDetail("4", "Product 4", 40.5, true);
+
+		Set<ProductDTO> products = new LinkedHashSet<>();
+		products.add(product1);
+		products.add(product2);
+		products.add(product3);
+
+		when(service.getSimilarProducts("1")).thenReturn(products);
+
+		when(mapper.toResponse(product1)).thenReturn(productDetail1);
+
+		when(mapper.toResponse(product2)).thenReturn(productDetail2);
+
+		when(mapper.toResponse(product3)).thenReturn(productDetail3);
+
+		ResponseEntity<Set<ProductDetail>> response = controller.getProductSimilar("1");
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+		assertThat(response.getBody()).containsExactly(productDetail1, productDetail2, productDetail3);
+
+		verify(service).getSimilarProducts("1");
+
+		verify(mapper).toResponse(product1);
+
+		verify(mapper).toResponse(product2);
+
+		verify(mapper).toResponse(product3);
+	}
+
+	@Test
+	void shouldReturnEmptySetWhenThereAreNoSimilarProducts() {
+
+		when(service.getSimilarProducts("1")).thenReturn(new LinkedHashSet<>());
+
+		ResponseEntity<Set<ProductDetail>> response = controller.getProductSimilar("1");
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+		assertThat(response.getBody()).isNotNull().isEmpty();
+
+		verify(service).getSimilarProducts("1");
+	}
+
+	@Test
+	void shouldReturnMappedProducts() {
+
+	ProductDTO product1 =
+	        product("2", "Product 2", new BigDecimal("20.5"), true);
+
+	ProductDTO product2 =
+	        product("3", "Product 3", new BigDecimal("30.5"), false);
+
+	ProductDetail productDetail1 =
+	        productDetail("2", "Product 2", 20.5, true);
+
+	ProductDetail productDetail2 =
+	        productDetail("3", "Product 3", 30.5, false);
+
+	Set<ProductDTO> products = new LinkedHashSet<>();
+	products.add(product1);
+	products.add(product2);
+
+	when(service.getSimilarProducts("1"))
+	        .thenReturn(products);
+
+	when(mapper.toResponse(product1))
+	        .thenReturn(productDetail1);
+
+	when(mapper.toResponse(product2))
+	        .thenReturn(productDetail2);
+
+	ResponseEntity<Set<ProductDetail>> response =
+	        controller.getProductSimilar("1");
+
+	assertThat(response.getBody())
+	        .containsExactly(
+	                productDetail1,
+	                productDetail2
+	        );
+
+	verify(mapper).toResponse(product1);
+	verify(mapper).toResponse(product2);
+
+
+	}
+
+	private ProductDTO product(String id, String name, BigDecimal price, boolean availability) {
+
+		ProductDTO product = new ProductDTO();
+		product.setId(id);
+		product.setName(name);
+		product.setPrice(price);
+		product.setAvailability(availability);
+
+		return product;
+	}
+
+	private ProductDetail productDetail(String id, String name, Double price, Boolean availability) {
+
+		return new ProductDetail().id(id).name(name).price(price).availability(availability);
+	}
+
 }
